@@ -110,6 +110,7 @@ import type {
   PixelDataTypedArray,
   PixelDataTypedArrayString,
 } from './PixelDataTypedArray';
+import type SparseCOOTensorArray from './SparseCOOTensorArray';
 import type { ImagePixelModule } from './ImagePixelModule';
 import type { ImagePlaneModule } from './ImagePlaneModule';
 import type { AffineMatrix } from './AffineMatrix';
@@ -268,6 +269,7 @@ export type {
   // PixelData
   PixelDataTypedArray,
   PixelDataTypedArrayString,
+  SparseCOOTensorArray,
   ImagePixelModule,
   ImagePlaneModule,
   AffineMatrix,

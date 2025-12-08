@@ -1,4 +1,5 @@
 import type { PixelDataTypedArray, PixelDataTypedArrayString } from '../types';
+import SparseCOOTensorArray from '../types/SparseCOOTensorArray';
 
 /**
  * Gets the appropriate TypedArray constructor based on the provided buffer type.
@@ -29,10 +30,14 @@ function getConstructorFromType(
         );
         return Float32Array;
       }
+    case 'SparseCOOTensorArray':
+      return SparseCOOTensorArray as unknown as new (
+        length: number
+      ) => PixelDataTypedArray;
     default:
       if (bufferType) {
         throw new Error(
-          'TargetBuffer should be Float32Array, Uint8Array, Uint16Array, Int16Array, or Uint32Array'
+          'TargetBuffer should be Float32Array, Uint8Array, Uint16Array, Int16Array, Uint32Array, or SparseCOOTensorArray'
         );
       } else {
         return Float32Array;
