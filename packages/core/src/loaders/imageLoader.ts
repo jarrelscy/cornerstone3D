@@ -690,16 +690,24 @@ export function unregisterAllImageLoaders(): void {
  *
  * @param referencedImageIds - An array of referenced image IDs.
  * @param options - The options for creating the derived images (`default: { targetBuffer: { type: 'Uint8Array' } }`).
+ * Can also pass a boolean to toggle `useSparseLabelmapBuffer`.
  * @returns The derived images.
  */
 export function createAndCacheDerivedLabelmapImages(
   referencedImageIds: string[],
-  options = {} as DerivedImageOptions & { useSparseLabelmapBuffer?: boolean }
+  options:
+    | (DerivedImageOptions & { useSparseLabelmapBuffer?: boolean })
+    | boolean = {}
 ): IImage[] {
+  const normalizedOptions =
+    typeof options === 'boolean'
+      ? { useSparseLabelmapBuffer: options }
+      : options;
+
   return createAndCacheDerivedImages(referencedImageIds, {
-    ...options,
+    ...normalizedOptions,
     targetBuffer: {
-      type: options.useSparseLabelmapBuffer
+      type: normalizedOptions.useSparseLabelmapBuffer
         ? 'SparseCOOTensorArray'
         : 'Uint8Array',
     },
@@ -714,16 +722,24 @@ export function createAndCacheDerivedLabelmapImages(
  *
  * @param referencedImageId The ID of the referenced image.
  * @param options The options for creating the derived image (`default: { targetBuffer: { type: 'Uint8Array' } }`).
+ * Can also pass a boolean to toggle `useSparseLabelmapBuffer`.
  * @returns A promise that resolves to the created derived segmentation image.
  */
 export function createAndCacheDerivedLabelmapImage(
   referencedImageId: string,
-  options = {} as DerivedImageOptions & { useSparseLabelmapBuffer?: boolean }
+  options:
+    | (DerivedImageOptions & { useSparseLabelmapBuffer?: boolean })
+    | boolean = {}
 ): IImage {
+  const normalizedOptions =
+    typeof options === 'boolean'
+      ? { useSparseLabelmapBuffer: options }
+      : options;
+
   return createAndCacheDerivedImage(referencedImageId, {
-    ...options,
+    ...normalizedOptions,
     targetBuffer: {
-      type: options.useSparseLabelmapBuffer
+      type: normalizedOptions.useSparseLabelmapBuffer
         ? 'SparseCOOTensorArray'
         : 'Uint8Array',
     },
