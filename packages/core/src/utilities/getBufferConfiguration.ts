@@ -68,8 +68,14 @@ function getBufferConfiguration(
   );
 
   // @ts-expect-error
-  const bytesPerElement = TypedArrayConstructor.BYTES_PER_ELEMENT;
-  const numBytes = length * bytesPerElement;
+  const bytesPerElement =
+    // @ts-expect-error
+    TypedArrayConstructor.BYTES_PER_ELEMENT ??
+    (TypedArrayConstructor === SparseCOOTensorArray ? 1 : 0);
+  const numBytes =
+    TypedArrayConstructor === SparseCOOTensorArray
+      ? 0
+      : length * bytesPerElement;
 
   return { numBytes, TypedArrayConstructor };
 }

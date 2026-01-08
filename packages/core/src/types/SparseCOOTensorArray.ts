@@ -1,5 +1,6 @@
 class SparseCOOTensorArray {
   public static readonly BYTES_PER_ELEMENT = 1;
+  public readonly BYTES_PER_ELEMENT = 1;
   public readonly length: number;
   private data: Map<number, number>;
 
@@ -15,11 +16,23 @@ class SparseCOOTensorArray {
         if (prop === 'byteLength') {
           return target.byteLength;
         }
+        if (prop === 'BYTES_PER_ELEMENT') {
+          return target.BYTES_PER_ELEMENT;
+        }
         if (prop === 'set') {
           return target.set.bind(target);
         }
         if (prop === 'subarray') {
           return target.subarray.bind(target);
+        }
+        if (prop === 'values') {
+          return target.values.bind(target);
+        }
+        if (prop === 'entries') {
+          return target.entries.bind(target);
+        }
+        if (prop === 'keys') {
+          return target.keys.bind(target);
         }
         if (prop === Symbol.iterator) {
           return target[Symbol.iterator].bind(target);
@@ -55,7 +68,7 @@ class SparseCOOTensorArray {
 
   get byteLength(): number {
     // Approximate memory by counting stored entries (1 byte each for label values).
-    return this.data.size;
+    return this.data.size * this.BYTES_PER_ELEMENT;
   }
 
   private get(index: number): number {
@@ -101,6 +114,22 @@ class SparseCOOTensorArray {
     }
 
     return new SparseCOOTensorArray(resultLength, entries);
+  }
+
+  public *keys(): IterableIterator<number> {
+    for (let i = 0; i < this.length; i++) {
+      yield i;
+    }
+  }
+
+  public *entries(): IterableIterator<[number, number]> {
+    for (let i = 0; i < this.length; i++) {
+      yield [i, this.get(i)];
+    }
+  }
+
+  public values(): IterableIterator<number> {
+    return this[Symbol.iterator]();
   }
 
   public [Symbol.iterator](): IterableIterator<number> {
