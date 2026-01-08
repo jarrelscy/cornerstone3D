@@ -444,6 +444,10 @@ export default class VoxelManager<T> {
   }
 
   public get sizeInBytes(): number {
+    if (this.scalarData?.byteLength !== undefined) {
+      return this.scalarData.byteLength;
+    }
+
     return this.getScalarDataLength() * this.bytePerVoxel;
   }
 

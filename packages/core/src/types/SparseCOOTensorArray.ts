@@ -1,12 +1,22 @@
+import { tensor } from '@hoff97/tensor-js';
+
+type TensorJsCPUTensor = InstanceType<typeof tensor.cpu.CPUTensor>;
+type TensorJsSparseTensor = InstanceType<typeof tensor.sparse.SparseTensor>;
+
 class SparseCOOTensorArray {
   public static readonly BYTES_PER_ELEMENT = 1;
   public readonly BYTES_PER_ELEMENT = 1;
   public readonly length: number;
-  private data: Map<number, number>;
+  private indexMap = new Map<number, number>();
+  private valuesTensor: TensorJsCPUTensor;
+  private indicesTensor: TensorJsCPUTensor;
+  private sparseTensor: TensorJsSparseTensor;
 
   constructor(length: number, entries?: Iterable<[number, number]>) {
     this.length = length;
-    this.data = new Map(entries);
+
+    const { values, indices, indexMap } = this.buildArraysFromEntries(entries);
+    this.setTensors(values, indices, indexMap);
 
     return new Proxy(this, {
       get: (target, prop) => {
@@ -33,6 +43,9 @@ class SparseCOOTensorArray {
         }
         if (prop === 'keys') {
           return target.keys.bind(target);
+        }
+        if (prop === 'getSparseTensor') {
+          return target.getSparseTensor.bind(target);
         }
         if (prop === Symbol.iterator) {
           return target[Symbol.iterator].bind(target);
@@ -67,15 +80,123 @@ class SparseCOOTensorArray {
   }
 
   get byteLength(): number {
-    // Approximate memory by counting stored entries (1 byte each for label values).
-    return this.data.size * this.BYTES_PER_ELEMENT;
+    return (
+      (this.valuesTensor.values as Uint8Array).byteLength +
+      (this.indicesTensor.values as Uint32Array).byteLength
+    );
+  }
+
+  public getSparseTensor(): TensorJsSparseTensor {
+    return this.sparseTensor;
+  }
+
+  private buildArraysFromEntries(entries?: Iterable<[number, number]>): {
+    values: Uint8Array;
+    indices: Uint32Array;
+    indexMap: Map<number, number>;
+  } {
+    const values: number[] = [];
+    const indices: number[] = [];
+    const indexMap = new Map<number, number>();
+
+    if (entries) {
+      for (const [index, value] of entries) {
+        if (
+          index < 0 ||
+          index >= this.length ||
+          !Number.isFinite(value) ||
+          !value
+        ) {
+          continue;
+        }
+
+        const position = values.length;
+        values.push(value);
+        indices.push(index);
+        indexMap.set(index, position);
+      }
+    }
+
+    return {
+      values: new Uint8Array(values),
+      indices: new Uint32Array(indices),
+      indexMap,
+    };
+  }
+
+  private setTensors(
+    values: Uint8Array,
+    indices: Uint32Array,
+    indexMap: Map<number, number>
+  ): void {
+    this.indexMap = indexMap;
+    this.valuesTensor = new tensor.cpu.CPUTensor(
+      [values.length],
+      values,
+      'uint8'
+    );
+    this.indicesTensor = new tensor.cpu.CPUTensor(
+      [indices.length, 1],
+      indices,
+      'uint32'
+    );
+    this.sparseTensor = new tensor.sparse.SparseTensor(
+      this.valuesTensor,
+      this.indicesTensor,
+      [this.length]
+    );
   }
 
   private get(index: number): number {
     if (index >= this.length || index < 0) {
       return 0;
     }
-    return this.data.get(index) ?? 0;
+
+    const position = this.indexMap.get(index);
+    if (position === undefined) {
+      return 0;
+    }
+
+    return (this.valuesTensor.values as Uint8Array)[position] ?? 0;
+  }
+
+  private removeAtPosition(position: number): void {
+    const values = this.valuesTensor.values as Uint8Array;
+    const indices = this.indicesTensor.values as Uint32Array;
+    const newLength = values.length - 1;
+    const nextValues = new Uint8Array(Math.max(newLength, 0));
+    const nextIndices = new Uint32Array(Math.max(newLength, 0));
+    const nextMap = new Map<number, number>();
+
+    let writeIndex = 0;
+    for (let i = 0; i < values.length; i++) {
+      if (i === position) {
+        continue;
+      }
+      const index = indices[i];
+      nextValues[writeIndex] = values[i];
+      nextIndices[writeIndex] = index;
+      nextMap.set(index, writeIndex);
+      writeIndex++;
+    }
+
+    this.setTensors(nextValues, nextIndices, nextMap);
+  }
+
+  private appendEntry(index: number, value: number): void {
+    const values = this.valuesTensor.values as Uint8Array;
+    const indices = this.indicesTensor.values as Uint32Array;
+    const nextValues = new Uint8Array(values.length + 1);
+    const nextIndices = new Uint32Array(indices.length + 1);
+
+    nextValues.set(values);
+    nextIndices.set(indices);
+    nextValues[values.length] = value;
+    nextIndices[indices.length] = index;
+
+    const nextMap = new Map(this.indexMap);
+    nextMap.set(index, values.length);
+    this.setTensors(nextValues, nextIndices, nextMap);
   }
 
   private setValue(index: number, value: number): void {
@@ -83,16 +204,55 @@ class SparseCOOTensorArray {
       return;
     }
 
+    const position = this.indexMap.get(index);
     if (!value) {
-      this.data.delete(index);
-    } else {
-      this.data.set(index, value);
+      if (position !== undefined) {
+        this.removeAtPosition(position);
+      }
+      return;
     }
+
+    if (position !== undefined) {
+      (this.valuesTensor.values as Uint8Array)[position] = value;
+      return;
+    }
+
+    this.appendEntry(index, value);
+  }
+
+  private rebuildFromDense(values: ArrayLike<number>, offset: number): void {
+    const indices: number[] = [];
+    const newValues: number[] = [];
+    const indexMap = new Map<number, number>();
+    const maxLength = Math.min(values.length, this.length - offset);
+
+    for (let i = 0; i < maxLength; i++) {
+      const value = values[i];
+      if (!value) {
+        continue;
+      }
+      const index = offset + i;
+      const position = newValues.length;
+      newValues.push(value);
+      indices.push(index);
+      indexMap.set(index, position);
+    }
+
+    this.setTensors(
+      new Uint8Array(newValues),
+      new Uint32Array(indices),
+      indexMap
+    );
   }
 
   public set(values: ArrayLike<number> | number, offset = 0): void {
     if (typeof values === 'number') {
       this.setValue(offset, values);
+      return;
+    }
+
+    if (offset === 0 && values.length >= this.length) {
+      this.rebuildFromDense(values, 0);
       return;
     }
 
@@ -106,10 +266,13 @@ class SparseCOOTensorArray {
     const stop = Math.min(end, this.length);
     const resultLength = Math.max(stop - start, 0);
     const entries: Array<[number, number]> = [];
+    const values = this.valuesTensor.values as Uint8Array;
+    const indices = this.indicesTensor.values as Uint32Array;
 
-    for (const [index, value] of this.data.entries()) {
+    for (let i = 0; i < indices.length; i++) {
+      const index = indices[i];
       if (index >= start && index < stop) {
-        entries.push([index - start, value]);
+        entries.push([index - start, values[i]]);
       }
     }
 
