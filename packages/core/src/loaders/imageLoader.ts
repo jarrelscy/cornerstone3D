@@ -22,6 +22,7 @@ import type {
 import imageLoadPoolManager from '../requestPool/imageLoadPoolManager';
 import * as metaData from '../metaData';
 import VoxelManagerEnum from '../enums/VoxelManagerEnum';
+import SparseCOOTensorArray from '../types/SparseCOOTensorArray';
 
 export interface ImageLoaderOptions {
   priority: number;
@@ -425,11 +426,12 @@ export function createAndCacheLocalImage(
         scalarData instanceof Uint8Array ||
         scalarData instanceof Float32Array ||
         scalarData instanceof Uint16Array ||
-        scalarData instanceof Int16Array
+        scalarData instanceof Int16Array ||
+        scalarData instanceof SparseCOOTensorArray
       )
     ) {
       throw new Error(
-        'createAndCacheLocalImage: scalarData must be of type Uint8Array, Uint16Array, Int16Array or Float32Array'
+        'createAndCacheLocalImage: scalarData must be of type Uint8Array, Uint16Array, Int16Array, Float32Array, or SparseCOOTensorArray'
       );
     }
 
@@ -448,7 +450,10 @@ export function createAndCacheLocalImage(
 
   // Determine bit depth based on scalarData type
   let bitsAllocated, bitsStored, highBit;
-  if (scalarDataToUse instanceof Uint8Array) {
+  if (
+    scalarDataToUse instanceof Uint8Array ||
+    scalarDataToUse instanceof SparseCOOTensorArray
+  ) {
     bitsAllocated = 8;
     bitsStored = 8;
     highBit = 7;
@@ -545,7 +550,7 @@ export function createAndCacheLocalImage(
     invert: false,
     getPixelData: () => voxelManager.getScalarData(),
     voxelManager,
-    sizeInBytes: scalarData.byteLength,
+    sizeInBytes: (scalarData || scalarDataToUse).byteLength,
     referencedImageId,
   } as IImage;
 
@@ -685,15 +690,27 @@ export function unregisterAllImageLoaders(): void {
  *
  * @param referencedImageIds - An array of referenced image IDs.
  * @param options - The options for creating the derived images (`default: { targetBuffer: { type: 'Uint8Array' } }`).
+ * Can also pass a boolean to toggle `useSparseLabelmapBuffer`.
  * @returns The derived images.
  */
 export function createAndCacheDerivedLabelmapImages(
   referencedImageIds: string[],
-  options = {} as DerivedImageOptions
+  options:
+    | (DerivedImageOptions & { useSparseLabelmapBuffer?: boolean })
+    | boolean = {}
 ): IImage[] {
+  const normalizedOptions =
+    typeof options === 'boolean'
+      ? { useSparseLabelmapBuffer: options }
+      : options;
+
   return createAndCacheDerivedImages(referencedImageIds, {
-    ...options,
-    targetBuffer: { type: 'Uint8Array' },
+    ...normalizedOptions,
+    targetBuffer: {
+      type: normalizedOptions.useSparseLabelmapBuffer
+        ? 'SparseCOOTensorArray'
+        : 'Uint8Array',
+    },
   });
 }
 
@@ -705,14 +722,26 @@ export function createAndCacheDerivedLabelmapImages(
  *
  * @param referencedImageId The ID of the referenced image.
  * @param options The options for creating the derived image (`default: { targetBuffer: { type: 'Uint8Array' } }`).
+ * Can also pass a boolean to toggle `useSparseLabelmapBuffer`.
  * @returns A promise that resolves to the created derived segmentation image.
  */
 export function createAndCacheDerivedLabelmapImage(
   referencedImageId: string,
-  options = {} as DerivedImageOptions
+  options:
+    | (DerivedImageOptions & { useSparseLabelmapBuffer?: boolean })
+    | boolean = {}
 ): IImage {
+  const normalizedOptions =
+    typeof options === 'boolean'
+      ? { useSparseLabelmapBuffer: options }
+      : options;
+
   return createAndCacheDerivedImage(referencedImageId, {
-    ...options,
-    targetBuffer: { type: 'Uint8Array' },
+    ...normalizedOptions,
+    targetBuffer: {
+      type: normalizedOptions.useSparseLabelmapBuffer
+        ? 'SparseCOOTensorArray'
+        : 'Uint8Array',
+    },
   });
 }

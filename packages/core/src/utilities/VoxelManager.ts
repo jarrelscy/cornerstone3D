@@ -444,17 +444,30 @@ export default class VoxelManager<T> {
   }
 
   public get sizeInBytes(): number {
+    if (this.scalarData?.byteLength !== undefined) {
+      return this.scalarData.byteLength;
+    }
+
     return this.getScalarDataLength() * this.bytePerVoxel;
   }
 
   public get bytePerVoxel(): number {
-    if (this.scalarData) {
+    if (this.scalarData?.BYTES_PER_ELEMENT !== undefined) {
       return this.scalarData.BYTES_PER_ELEMENT;
     }
 
+    if (this._getConstructor) {
+      const ctor = this._getConstructor();
+      // @ts-ignore
+      if (ctor?.BYTES_PER_ELEMENT !== undefined) {
+        // @ts-ignore
+        return ctor.BYTES_PER_ELEMENT;
+      }
+    }
+
     // get the first element of the scalar data
-    const value = this._get(0) as unknown as { BYTES_PER_ELEMENT: number };
-    return value.BYTES_PER_ELEMENT;
+    const value = this._get(0) as unknown as { BYTES_PER_ELEMENT?: number };
+    return value?.BYTES_PER_ELEMENT ?? 0;
   }
 
   public clearBounds() {

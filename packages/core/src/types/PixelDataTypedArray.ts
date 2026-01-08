@@ -7,7 +7,8 @@ export type PixelDataTypedArray =
   | Int8Array
   | Uint8ClampedArray
   | Uint32Array
-  | Int32Array;
+  | Int32Array
+  | import('./SparseCOOTensorArray').SparseCOOTensorArray;
 
 export type PixelDataTypedArrayString =
   | 'Float32Array'
@@ -20,4 +21,5 @@ export type PixelDataTypedArrayString =
   | 'Uint32Array'
   | 'Int32Array'
   // Used to not create an array object
+  | 'SparseCOOTensorArray'
   | 'none';
